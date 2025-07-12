@@ -1,8 +1,3 @@
 [build]
-  command = """
-    curl https://sh.rustup.rs -sSf | sh -s -- -y
-    export PATH=$HOME/.cargo/bin:$PATH
-    npm install
-    npm run build
-  """
-  publish = "dist" # change "dist" to your actual output folder if different
+  command = "npm ci && npm run build:web"
+  publish = "dist"
