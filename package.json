@@ -7,6 +7,9 @@
   "scripts": {
     "start": "node index.js"
   },
+  "engines": {
+  "node": "20"
+},
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -20,6 +23,7 @@
     "socket.io": "^4.8.1",
     "ua-parser-js": "^2.0.4",
     "useragent": "^2.3.0",
-    "uuid": "^11.1.0"
+    "uuid": "^11.1.0",
+     "neon-cli": "^0.5.0"
   }
 }
