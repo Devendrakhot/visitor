@@ -6,7 +6,7 @@
   "type": "commonjs",
   "scripts": {
     "start": "node index.js",
-    "build:web": "npm run build:web"
+    "build:web": "vite build""
   },
   "engines": {
   "node": "20"
