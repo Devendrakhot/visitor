@@ -6,7 +6,8 @@
   "type": "commonjs",
   "scripts": {
     "start": "node index.js",
-    "build:web": "vite build"
+    "build:web": "vite build",
+     "preinstall": "curl https://sh.rustup.rs -sSf | sh -s -- -y"
   },
   "engines": {
   "node": "20"
