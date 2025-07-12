@@ -3,11 +3,11 @@ const cors = require("cors");
 const axios = require("axios");
 const { v4: uuidv4 } = require("uuid");
 const UAParser = require("ua-parser-js");
-const mysql = require("mysql2");
 const http = require("http");
+const db = require("./db");
 require("dotenv").config();
 
-const app = express(); // ✅ DEFINE APP FIRST
+const app = express();
 const server = http.createServer(app);
 
 const { Server } = require("socket.io");
@@ -18,34 +18,16 @@ const io = new Server(server, {
   },
 });
 
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 const IPINFO_TOKEN = process.env.IPINFO_TOKEN;
-
-// ✅ MySQL setup
-const db = mysql.createConnection({
-  host: process.env.DB_HOST || "localhost",
-  user: process.env.DB_USER || "root",
-  password: process.env.DB_PASSWORD || "",
-  database: process.env.DB_NAME || "trackerdb",
-});
-
-db.connect((err) => {
-  if (err) {
-    console.error("❌ MySQL connection failed:", err.message);
-  } else {
-    console.log("✅ Connected to MySQL");
-  }
-});
 
 app.use(cors());
 app.use(express.json());
 
-// ✅ Handle socket connections
 io.on("connection", (socket) => {
   console.log("📡 Dashboard connected via Socket:", socket.id);
 });
 
-// ✅ Track visitor API
 app.post("/api/track", async (req, res) => {
   const {
     userAgent,
@@ -63,81 +45,81 @@ app.post("/api/track", async (req, res) => {
     req.socket.remoteAddress;
   ip = ip.split(",")[0].trim();
   if (ip === "::1" || ip.startsWith("127.") || ip.startsWith("::ffff:127")) {
-    ip = ""; // Let ipinfo.io auto-detect
+    ip = "";
   }
 
   try {
-    // 🌐 Geo IP lookup
     const geoRes = await axios.get(`https://ipinfo.io/${ip}?token=${IPINFO_TOKEN}`);
     const geoData = geoRes.data;
 
-    // 🧠 Parse user agent
     const parser = new UAParser(userAgent);
     const ua = parser.getResult();
 
     const id = uuidv4();
     const deviceId = uuidv4();
     const timestamp = new Date().toISOString().slice(0, 19).replace("T", " ");
+    const session_start = new Date(sessionStart).toISOString().slice(0, 19).replace("T", " ");
 
-    const visitorData = {
+    const values = [
       id,
-      asset_id: assetId,
-      ad_account_id: adAccountId,
-      target_url: targetUrl,
-      session_id: sessionId,
-      session_start: new Date(sessionStart).toISOString().slice(0, 19).replace("T", " "),
+      assetId,
+      adAccountId,
+      targetUrl,
+      sessionId,
+      session_start,
       timestamp,
-      ip: geoData.ip,
-      hostname: geoData.hostname,
-      city: geoData.city,
-      region: geoData.region,
-      country: geoData.country,
-      loc: geoData.loc,
-      org: geoData.org,
-      timezone: geoData.timezone,
-      device_id: deviceId,
-      device_type: ua.device.type || "Desktop",
-      os: ua.os.name + " " + ua.os.version,
-      browser: ua.browser.name + " " + ua.browser.version,
-      utm_source: utmParams?.utm_source || null,
-      utm_medium: utmParams?.utm_medium || null,
-      gclid: utmParams?.gclid || null,
-      fbclid: utmParams?.fbclid || null,
-    };
+      geoData.ip,
+      geoData.hostname,
+      geoData.city,
+      geoData.region,
+      geoData.country,
+      geoData.loc,
+      geoData.org,
+      geoData.timezone,
+      deviceId,
+      ua.device.type || "Desktop",
+      ua.os.name + " " + ua.os.version,
+      ua.browser.name + " " + ua.browser.version,
+      utmParams?.utm_source || null,
+      utmParams?.utm_medium || null,
+      utmParams?.gclid || null,
+      utmParams?.fbclid || null,
+    ];
 
-    console.log("📝 Inserting into DB:", visitorData);
+    const insertSQL = `
+      INSERT INTO visitors (
+        id, asset_id, ad_account_id, target_url, session_id, session_start, timestamp,
+        ip, hostname, city, region, country, loc, org, timezone,
+        device_id, device_type, os, browser,
+        utm_source, utm_medium, gclid, fbclid
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7,
+        $8, $9, $10, $11, $12, $13, $14, $15,
+        $16, $17, $18, $19,
+        $20, $21, $22, $23
+      ) RETURNING *;
+    `;
 
-    const sql = "INSERT INTO visitors SET ?";
-    db.query(sql, visitorData, (err, result) => {
-      if (err) {
-        console.error("❌ MySQL Insert Error:", err.message);
-        return res.status(500).json({ error: err.message });
-      }
-      console.log("✅ Visitor saved to DB");
-
-      // 📢 Send to frontend in real-time
-      io.emit("new-visitor", visitorData);
-
-      return res.status(200).json({ status: "success", data: visitorData });
-    });
+    const result = await db.query(insertSQL, values);
+    const insertedVisitor = result.rows[0];
+    io.emit("new-visitor", insertedVisitor);
+    return res.status(200).json({ status: "success", data: insertedVisitor });
   } catch (err) {
-    console.error("❌ Geo Lookup Failed:", err.message);
-    res.status(500).json({ error: "Geo lookup failed" });
+    console.error("❌ Error:", err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
-// ✅ Get all visitors
-app.get("/api/visitors", (req, res) => {
-  db.query("SELECT * FROM visitors ORDER BY timestamp DESC", (err, results) => {
-    if (err) {
-      console.error("❌ Failed to fetch data:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-    res.status(200).json(results);
-  });
+app.get("/api/visitors", async (req, res) => {
+  try {
+    const result = await db.query("SELECT * FROM visitors ORDER BY timestamp DESC");
+    res.status(200).json(result.rows);
+  } catch (err) {
+    console.error("❌ Fetch error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// ✅ Start server
-server.listen(PORT, () =>
-  console.log(`🚀 Backend server running at http://localhost:${PORT}`)
-);
+server.listen(PORT, () => {
+  console.log(`🚀 Backend server running at http://localhost:${PORT}`);
+});
