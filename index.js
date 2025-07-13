@@ -65,7 +65,7 @@ app.post("/api/track", async (req, res) => {
     const deviceId = uuidv4();
     const timestamp = new Date().toISOString().slice(0, 19).replace("T", " ");
     const session_start = new Date(sessionStart).toISOString().slice(0, 19).replace("T", " ");
-
+const isp = geoData.org?.split(" ").slice(1).join(" ");
     const values = [
       id,
       assetId,

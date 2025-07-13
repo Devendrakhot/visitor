@@ -1,5 +1,11 @@
+<<<<<<< HEAD
 
 [build]
   command = "npm run build"
   publish = "dist"
 
+=======
+[build]
+  command = "npm run dev"
+  publish = "dist"
+>>>>>>> d22de4286cfdaeffe44166ffe9ecc8847902e73d
