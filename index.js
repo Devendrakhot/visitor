@@ -1,15 +1,20 @@
+// Required modules
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
 const { v4: uuidv4 } = require("uuid");
 const UAParser = require("ua-parser-js");
 const http = require("http");
-const db = require("./db");
-require("dotenv").config();
+const db = require("./db"); // Make sure db.js is configured correctly
+require("dotenv").config(); // Load environment variables
 
+// App setup
 const app = express();
 const server = http.createServer(app);
+const PORT = process.env.PORT || 5000;
+const IPINFO_TOKEN = process.env.IPINFO_TOKEN;
 
+// Socket.IO setup
 const { Server } = require("socket.io");
 const io = new Server(server, {
   cors: {
@@ -18,16 +23,16 @@ const io = new Server(server, {
   },
 });
 
-const PORT = process.env.PORT || 5000;
-const IPINFO_TOKEN = process.env.IPINFO_TOKEN;
-
+// Middleware
 app.use(cors());
 app.use(express.json());
 
+// Socket.IO connection
 io.on("connection", (socket) => {
   console.log("📡 Dashboard connected via Socket:", socket.id);
 });
 
+// Track visitor
 app.post("/api/track", async (req, res) => {
   const {
     userAgent,
@@ -44,6 +49,7 @@ app.post("/api/track", async (req, res) => {
     req.connection.remoteAddress ||
     req.socket.remoteAddress;
   ip = ip.split(",")[0].trim();
+
   if (ip === "::1" || ip.startsWith("127.") || ip.startsWith("::ffff:127")) {
     ip = "";
   }
@@ -77,6 +83,7 @@ app.post("/api/track", async (req, res) => {
       geoData.org,
       geoData.timezone,
       deviceId,
+      
       ua.device.type || "Desktop",
       ua.os.name + " " + ua.os.version,
       ua.browser.name + " " + ua.browser.version,
@@ -84,6 +91,7 @@ app.post("/api/track", async (req, res) => {
       utmParams?.utm_medium || null,
       utmParams?.gclid || null,
       utmParams?.fbclid || null,
+       geoData.postal ,
     ];
 
     const insertSQL = `
@@ -91,18 +99,19 @@ app.post("/api/track", async (req, res) => {
         id, asset_id, ad_account_id, target_url, session_id, session_start, timestamp,
         ip, hostname, city, region, country, loc, org, timezone,
         device_id, device_type, os, browser,
-        utm_source, utm_medium, gclid, fbclid
+        utm_source, utm_medium, gclid, fbclid,zip
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7,
         $8, $9, $10, $11, $12, $13, $14, $15,
         $16, $17, $18, $19,
-        $20, $21, $22, $23
+        $20, $21, $22, $23,$24
       ) RETURNING *;
     `;
 
     const result = await db.query(insertSQL, values);
     const insertedVisitor = result.rows[0];
     io.emit("new-visitor", insertedVisitor);
+
     return res.status(200).json({ status: "success", data: insertedVisitor });
   } catch (err) {
     console.error("❌ Error:", err.message);
@@ -110,6 +119,7 @@ app.post("/api/track", async (req, res) => {
   }
 });
 
+// Fetch visitors
 app.get("/api/visitors", async (req, res) => {
   try {
     const result = await db.query("SELECT * FROM visitors ORDER BY timestamp DESC");
@@ -120,6 +130,7 @@ app.get("/api/visitors", async (req, res) => {
   }
 });
 
+// Start server
 server.listen(PORT, () => {
   console.log(`🚀 Backend server running at http://localhost:${PORT}`);
 });
